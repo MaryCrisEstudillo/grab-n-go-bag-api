@@ -1,0 +1,22 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: grabngo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: grabngo
+      POSTGRES_PASSWORD: grabngo
+      POSTGRES_DB: grabngo
+    ports:
+      - '5432:5432'
+    volumes:
+      - grabngo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `npm run migrate` fails confusingly if it beats Postgres to the port.
+      test: ['CMD-SHELL', 'pg_isready -U grabngo -d grabngo']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  grabngo-pgdata:

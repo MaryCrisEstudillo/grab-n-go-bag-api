@@ -1,0 +1,176 @@
+service: grabngo-bag-api
+frameworkVersion: '3'
+
+# Load .env, so `npm run dev` works from a fresh clone without exporting
+# anything by hand. In a deployed stage these come from the CI environment.
+useDotenv: true
+
+plugins:
+  - serverless-esbuild
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: ${opt:region, 'ap-southeast-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 15
+  environment:
+    NODE_OPTIONS: '--enable-source-maps'
+    DATABASE_URL: ${env:DATABASE_URL}
+    JWT_SECRET: ${env:JWT_SECRET}
+    JWT_EXPIRES_IN: ${env:JWT_EXPIRES_IN, '30d'}
+    CORS_ORIGIN: ${env:CORS_ORIGIN, '*'}
+  httpApi:
+    cors:
+      allowedOrigins:
+        - ${env:CORS_ORIGIN, '*'}
+      allowedHeaders:
+        - Content-Type
+        - Authorization
+      allowedMethods:
+        - GET
+        - POST
+        - PATCH
+        - DELETE
+      allowCredentials: false
+
+custom:
+  esbuild:
+    bundle: true
+    minify: false
+    sourcemap: true
+    target: node20
+    platform: node
+    format: esm
+    # pg ships optional native bindings it can live without; leaving them
+    # external keeps esbuild from failing on requires it can't resolve.
+    external:
+      - pg-native
+    outputFileExtension: .mjs
+    banner:
+      # `format: esm` drops require, which some transitive CJS deps still reach
+      # for at load time.
+      js: |
+        import { createRequire as topLevelCreateRequire } from 'module';
+        const require = topLevelCreateRequire(import.meta.url);
+  serverless-offline:
+    httpPort: 3001
+    noPrependStageInUrl: true
+
+functions:
+  # ─── Auth ──────────────────────────────────────────────────────────────────
+  signIn:
+    handler: src/handlers/signIn.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/sessions
+
+  signOut:
+    handler: src/handlers/signOut.handler
+    events:
+      - httpApi:
+          method: DELETE
+          path: /auth/sessions
+
+  register:
+    handler: src/handlers/register.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/users
+
+  getCurrentUser:
+    handler: src/handlers/getCurrentUser.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /auth/users/me
+
+  # ─── Categories ────────────────────────────────────────────────────────────
+  listCategories:
+    handler: src/handlers/listCategories.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bag/categories
+
+  getCategory:
+    handler: src/handlers/getCategory.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bag/categories/{id}
+
+  createCategory:
+    handler: src/handlers/createCategory.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /bag/categories
+
+  updateCategory:
+    handler: src/handlers/updateCategory.handler
+    events:
+      - httpApi:
+          method: PATCH
+          path: /bag/categories/{id}
+
+  deleteCategory:
+    handler: src/handlers/deleteCategory.handler
+    events:
+      - httpApi:
+          method: DELETE
+          path: /bag/categories/{id}
+
+  listItemsByCategory:
+    handler: src/handlers/listItemsByCategory.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bag/categories/{id}/items
+
+  # ─── Items ─────────────────────────────────────────────────────────────────
+  listItems:
+    handler: src/handlers/listItems.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bag/items
+
+  getItem:
+    handler: src/handlers/getItem.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bag/items/{id}
+
+  createItem:
+    handler: src/handlers/createItem.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /bag/items
+
+  updateItem:
+    handler: src/handlers/updateItem.handler
+    events:
+      - httpApi:
+          method: PATCH
+          path: /bag/items/{id}
+
+  updateItemQuantity:
+    handler: src/handlers/updateItemQuantity.handler
+    events:
+      - httpApi:
+          method: PATCH
+          path: /bag/items/{id}/quantity
+
+  deleteItem:
+    handler: src/handlers/deleteItem.handler
+    events:
+      - httpApi:
+          method: DELETE
+          path: /bag/items/{id}

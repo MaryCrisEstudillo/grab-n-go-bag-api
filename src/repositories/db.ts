@@ -1,0 +1,76 @@
+import pg from 'pg';
+import { DATABASE_URL } from '../lib/env';
+
+/**
+ * A `date` column is a calendar day, and node-postgres would otherwise hand it
+ * back as a JS Date at local midnight — which is how "expires today" turns into
+ * "expired" for anyone east of the server. Keep the raw 'YYYY-MM-DD' string.
+ */
+pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
+
+/**
+ * Lambda and connection pools are a bad pairing: every warm container holds its
+ * own pool, so a pool of 10 across 50 concurrent containers is 500 connections
+ * against a database that will accept about 100.
+ *
+ * One connection per container, created lazily and reused across invocations,
+ * is the shape that actually works. If concurrency ever climbs past what
+ * Postgres will accept, the answer is RDS Proxy in front of it — not a bigger
+ * `max` here.
+ */
+let pool: pg.Pool | undefined;
+
+function isLocal(url: string): boolean {
+  return url.includes('localhost') || url.includes('127.0.0.1');
+}
+
+export function getPool(): pg.Pool {
+  if (!pool) {
+    pool = new pg.Pool({
+      connectionString: DATABASE_URL,
+      max: 1,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 5_000,
+      // RDS presents a cert from a CA bundle Lambda doesn't ship. Local
+      // Postgres has no TLS at all.
+      ssl: isLocal(DATABASE_URL) ? undefined : { rejectUnauthorized: false },
+    });
+
+    // A dropped backend must not take the container down with an unhandled
+    // 'error' event; the next query opens a fresh connection.
+    pool.on('error', (error) => {
+      console.error('Idle client error', error);
+    });
+  }
+
+  return pool;
+}
+
+export async function query<T extends pg.QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+): Promise<T[]> {
+  const result = await getPool().query<T>(text, params);
+  return result.rows;
+}
+
+/** The single-row read every `findById` wants. */
+export async function queryOne<T extends pg.QueryResultRow>(
+  text: string,
+  params: unknown[] = [],
+): Promise<T | null> {
+  const rows = await query<T>(text, params);
+  return rows[0] ?? null;
+}
+
+/** Postgres' code for a unique index violation. */
+export const UNIQUE_VIOLATION = '23505';
+
+export function isUniqueViolation(error: unknown, constraint?: string): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const { code, constraint: hit } = error as { code?: string; constraint?: string };
+  if (code !== UNIQUE_VIOLATION) return false;
+
+  return constraint ? hit === constraint : true;
+}
