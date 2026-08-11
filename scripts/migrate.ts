@@ -10,16 +10,37 @@ import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  console.error('DATABASE_URL is not set. Copy .env.example to .env first.');
-  process.exit(1);
+/**
+ * Migrations run against the direct connection when there is one. A pooler in
+ * transaction mode is built for short-lived application queries, not for DDL
+ * held open across a transaction — hosted Postgres providers hand out both a
+ * pooled and a direct URL for exactly this reason.
+ */
+function resolveDatabaseUrl(): string {
+  const url = process.env.DATABASE_URL_UNPOOLED ?? process.env.DATABASE_URL;
+  if (!url) {
+    console.error('DATABASE_URL is not set. Copy .env.example to .env first.');
+    process.exit(1);
+  }
+
+  if (process.env.DATABASE_URL_UNPOOLED) {
+    console.log('using DATABASE_URL_UNPOOLED (direct connection)');
+  }
+  return url;
 }
+
+const DATABASE_URL = resolveDatabaseUrl();
 
 const MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations');
 
 async function main() {
-  const client = new pg.Client({ connectionString: DATABASE_URL });
+  const isLocal =
+    DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1');
+
+  const client = new pg.Client({
+    connectionString: DATABASE_URL,
+    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  });
   await client.connect();
 
   await client.query(`

@@ -30,9 +30,15 @@ export function getPool(): pg.Pool {
       connectionString: DATABASE_URL,
       max: 1,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 5_000,
-      // RDS presents a cert from a CA bundle Lambda doesn't ship. Local
-      // Postgres has no TLS at all.
+      /**
+       * Generous on purpose. A serverless Postgres that has scaled to zero
+       * needs a second or two to wake, and that wake lands on whichever
+       * request arrives first after a quiet spell. Five seconds would turn a
+       * normal cold start into an error.
+       */
+      connectionTimeoutMillis: 15_000,
+      // Managed Postgres presents a cert from a CA bundle Lambda doesn't ship.
+      // Local Postgres has no TLS at all.
       ssl: isLocal(DATABASE_URL) ? undefined : { rejectUnauthorized: false },
     });
 

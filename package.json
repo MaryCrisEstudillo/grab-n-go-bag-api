@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "serverless offline start",
     "migrate": "tsx scripts/migrate.ts",
+    "db:check": "tsx scripts/check-db.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

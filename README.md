@@ -23,6 +23,7 @@ npm run dev                # http://localhost:3001
 | --- | --- |
 | `npm run dev` | serverless-offline on :3001, with hot reload |
 | `npm run migrate` | Apply any migrations that haven't run |
+| `npm run db:check` | Confirm `DATABASE_URL` connects, and say what's there |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | TypeScript only |
 | `npm run deploy` | `serverless deploy` — needs AWS credentials |
@@ -174,6 +175,53 @@ contain.
 
 The services and repositories aren't covered yet — that needs a test database
 and a fixtures story, which is the obvious next piece of work.
+
+## Using Neon instead of local Postgres
+
+Nothing in `src/` changes — only what `DATABASE_URL` points at.
+
+1. Create a project at [neon.tech](https://neon.tech). The free tier is enough
+   for roughly 8,000 users' worth of bags.
+2. From the dashboard, copy the **pooled** connection string — its host contains
+   `-pooler`. Take that one, not the direct one.
+3. Put both in `.env`:
+
+   ```sh
+   DATABASE_URL=postgres://…-pooler.…neon.tech/…?sslmode=require
+   DATABASE_URL_UNPOOLED=postgres://…              # the direct string
+   ```
+
+4. Check it, then migrate:
+
+   ```sh
+   npm run db:check
+   npm run migrate
+   npm run dev
+   ```
+
+`db:check` prints the host, whether you gave it the pooled or direct endpoint,
+and which tables exist. Run it first — a failure there points at the connection
+string rather than at whatever you were trying to do next.
+
+**Why the pooled string.** Every warm Lambda container holds its own pool, so
+`max: 10` across 50 containers is 500 connections against a database that
+accepts about 100. Neon's pooler sits in front and absorbs that. It's the same
+problem RDS would need RDS Proxy for — using the pooled endpoint is how it stays
+solved for free.
+
+**Why migrations use the direct string.** A transaction pooler is built for
+short application queries, not DDL held open across a transaction.
+`npm run migrate` prefers `DATABASE_URL_UNPOOLED` when it's set and falls back
+to `DATABASE_URL` when it isn't, so a local setup needs only the one variable.
+
+Two things worth knowing:
+
+- **The first request after a quiet spell takes about a second.** Free-tier
+  compute scales to zero, and waking it lands on whoever arrives first. The
+  pool's connect timeout is set to 15s to leave room for that.
+- **If auth fails with `channel_binding=require` in the string, drop that
+  parameter.** node-postgres doesn't implement channel binding; TLS is
+  unaffected.
 
 ## Deploying
 
