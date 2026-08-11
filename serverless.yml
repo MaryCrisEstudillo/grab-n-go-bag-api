@@ -82,6 +82,16 @@ functions:
           method: POST
           path: /auth/users
 
+  createDemoSession:
+    handler: src/handlers/createDemoSession.handler
+    # Seeds a whole bag in one transaction, so it does more work than the
+    # other auth calls.
+    timeout: 25
+    events:
+      - httpApi:
+          method: POST
+          path: /auth/demo
+
   getCurrentUser:
     handler: src/handlers/getCurrentUser.handler
     events:
