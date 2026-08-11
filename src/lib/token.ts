@@ -6,6 +6,8 @@ import { unauthorized } from './errors';
 interface TokenPayload {
   sub: string;
   email: string;
+  /** Absent on session tokens. Set on the single-purpose ones below. */
+  purpose?: string;
 }
 
 export function signToken(actor: Actor): string {
@@ -31,9 +33,38 @@ export function readToken(header: string | undefined): string | null {
   return match ? match[1].trim() : value;
 }
 
+/**
+ * A separate, long-lived token for the unsubscribe link.
+ *
+ * `purpose` is what keeps the two apart: an unsubscribe link sits in an inbox
+ * for months and may pass through forwarding and scanners, so it must never be
+ * usable as a session. `verifyToken` rejects anything carrying a purpose, and
+ * this rejects anything without one.
+ */
+export function signUnsubscribeToken(userId: string): string {
+  return jwt.sign({ sub: userId, purpose: 'unsubscribe' }, JWT_SECRET, {
+    expiresIn: '365d',
+  });
+}
+
+export function verifyUnsubscribeToken(token: string): string {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    if (payload.purpose !== 'unsubscribe') {
+      throw new Error('wrong purpose');
+    }
+    return payload.sub;
+  } catch {
+    throw unauthorized('That unsubscribe link is no longer valid.');
+  }
+}
+
 export function verifyToken(token: string): Actor {
   try {
     const payload = jwt.verify(token, JWT_SECRET) as TokenPayload;
+    // An unsubscribe token must never open a session — see above.
+    if (payload.purpose) throw new Error('not a session token');
+
     return { id: payload.sub, email: payload.email };
   } catch {
     // Expired and forged are the same answer to the caller: sign in again.

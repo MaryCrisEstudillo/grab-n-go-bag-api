@@ -22,6 +22,11 @@ provider:
     JWT_SECRET: ${env:JWT_SECRET}
     JWT_EXPIRES_IN: ${env:JWT_EXPIRES_IN, '30d'}
     CORS_ORIGIN: ${env:CORS_ORIGIN, '*'}
+    # Absent until a sending domain exists. The digest job logs and skips
+    # rather than failing when these are unset.
+    RESEND_API_KEY: ${env:RESEND_API_KEY, ''}
+    EMAIL_FROM: ${env:EMAIL_FROM, ''}
+    APP_URL: ${env:APP_URL, 'http://localhost:3000'}
   httpApi:
     cors:
       allowedOrigins:
@@ -82,15 +87,24 @@ functions:
           method: POST
           path: /auth/users
 
-  createDemoSession:
-    handler: src/handlers/createDemoSession.handler
-    # Seeds a whole bag in one transaction, so it does more work than the
-    # other auth calls.
-    timeout: 25
+  # ─── Notifications ─────────────────────────────────────────────────────────
+  sendExpiryDigests:
+    handler: src/handlers/sendExpiryDigests.handler
+    # Mails every user who has something expiring, one provider call each.
+    timeout: 300
+    events:
+      # 00:00 UTC is 08:00 in Manila — a reminder about food worth checking
+      # should arrive over breakfast, not overnight.
+      - schedule:
+          rate: cron(0 0 * * ? *)
+          enabled: true
+
+  unsubscribe:
+    handler: src/handlers/unsubscribe.handler
     events:
       - httpApi:
           method: POST
-          path: /auth/demo
+          path: /notifications/unsubscribe
 
   getCurrentUser:
     handler: src/handlers/getCurrentUser.handler

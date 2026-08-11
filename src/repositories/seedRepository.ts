@@ -3,19 +3,25 @@ import { SEED_CATEGORIES, resolveSeedItems } from '../data/seed';
 import { withTransaction } from './db';
 
 /**
- * Creates a demo account and its whole bag in one transaction. Spanning three
- * tables is exactly why this doesn't go through the per-table repositories —
- * a visitor must never land on an account with half a bag in it.
+ * Creates an account with a bag already packed, in one transaction.
+ *
+ * Registration seeds rather than starting empty for two reasons: an empty bag
+ * is a poor first screen, and the expiry reminder can only prove it works if
+ * there is something in there to expire. The seed always includes items a few
+ * days out, so the first digest lands the next morning.
+ *
+ * Spanning three tables is why this doesn't go through the per-table
+ * repositories — nobody may land on an account holding half a bag.
  */
-export function createSeededUser(
+export function createUserWithSeededBag(
   email: string,
   passwordHash: string,
   today = new Date(),
 ): Promise<UserRow> {
   return withTransaction(async (client) => {
     const { rows } = await client.query<UserRow>(
-      `INSERT INTO users (email, password_hash, is_demo)
-            VALUES ($1, $2, true)
+      `INSERT INTO users (email, password_hash)
+            VALUES ($1, $2)
          RETURNING id, email, password_hash`,
       [email, passwordHash],
     );
@@ -67,23 +73,5 @@ export function createSeededUser(
     );
 
     return user;
-  });
-}
-
-/**
- * Sweeps up demo accounts past `olderThanDays`. Their categories and items go
- * with them through the cascade. Nothing calls this on a schedule yet — it is
- * here so that when the table needs it, the query already exists and is known
- * to be scoped to demo rows only.
- */
-export async function removeStaleDemoUsers(olderThanDays: number): Promise<number> {
-  return withTransaction(async (client) => {
-    const { rowCount } = await client.query(
-      `DELETE FROM users
-        WHERE is_demo
-          AND created_at < now() - make_interval(days => $1)`,
-      [olderThanDays],
-    );
-    return rowCount ?? 0;
   });
 }

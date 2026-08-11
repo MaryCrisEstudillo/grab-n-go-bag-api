@@ -47,8 +47,14 @@ raw.
 | --- | --- | --- |
 | `POST` | `/auth/sessions` | Sign in → `{ token, user }` |
 | `DELETE` | `/auth/sessions` | Sign out → `204` |
-| `POST` | `/auth/users` | Register → `201 { token, user }` |
+| `POST` | `/auth/users` | Register → `201 { token, user }`, with a bag already seeded |
 | `GET` | `/auth/users/me` | The user behind the token |
+
+### Notifications
+
+| | | |
+| --- | --- | --- |
+| `POST` | `/notifications/unsubscribe?token=…` | Stop the expiry reminders. The token is the authorisation — no session needed. |
 
 ### Categories
 
@@ -128,6 +134,54 @@ client's copy is a courtesy to the person typing; this one is the actual rule.
 
 Checkers are pure and return a message or `null`, so they're tested without a
 request in sight.
+
+### Expiry reminders
+
+A scheduled job runs daily at 00:00 UTC — 08:00 in Manila, so a reminder about
+food worth checking arrives over breakfast rather than overnight. It mails each
+user one digest of everything expired or within ten days of expiring. Ten days
+is the same threshold the app calls "expiring", so the inbox matches the badge.
+
+**It won't nag.** Each send records a fingerprint of the items it listed and
+which bucket each fell into. The next run compares before sending, so a bag
+nobody has touched produces one email, not one every morning until the tin of
+sardines is finally thrown out. The fingerprint deliberately ignores the day
+count — otherwise the countdown alone would change it daily and defeat the
+whole thing. Something has to appear, disappear, or cross from "expiring" into
+"expired" before another email is worth sending.
+
+Every message carries an unsubscribe link, as a `List-Unsubscribe` header as
+well as in the body — Gmail surfaces the header as a one-click control and
+counts its absence against bulk senders. That link is a separate long-lived
+token carrying `purpose: 'unsubscribe'`; session verification rejects anything
+with a purpose, and the unsubscribe route rejects anything without one, so a
+link sitting in an inbox for a year can never become a login. The route is a
+`POST` because scanners and link previewers follow `GET`s, and turning someone's
+reminders off because their mail provider prefetched a link would be its own
+kind of bug.
+
+Sending goes through Resend. **Both `RESEND_API_KEY` and `EMAIL_FROM` are
+optional**: without them the job still runs, logs how many people it would have
+mailed, and sends nothing — so none of this blocks on a domain existing.
+
+To turn it on, verify a domain in Resend, add the DKIM records it gives you,
+and set the two variables. A `From` address on an unverified domain is worse
+than no email at all: Gmail treats it as forged.
+
+### Registration seeds a bag
+
+A new account arrives with eight categories and nineteen items already in it,
+written in the same transaction as the user.
+
+Two reasons. An empty first screen is a poor introduction, and — more
+practically — the reminder can only demonstrate itself if there is something
+there to expire. The seed always includes items three, six and nine days out,
+plus two already past, so the first digest lands the next morning without the
+person having to do anything.
+
+Seed dates are offsets resolved at registration rather than fixed dates, so the
+bag never drifts into "everything expired" and make the app look broken to
+whoever signs up next year.
 
 ### Auth
 
