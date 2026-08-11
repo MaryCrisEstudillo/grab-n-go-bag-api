@@ -9,8 +9,9 @@
   },
   "scripts": {
     "dev": "serverless offline start",
-    "migrate": "tsx scripts/migrate.ts",
-    "db:check": "tsx scripts/check-db.ts",
+    "migrate": "tsx --env-file-if-exists=.env scripts/migrate.ts",
+    "db:check": "tsx --env-file-if-exists=.env scripts/check-db.ts",
+    "email:test": "tsx --env-file-if-exists=.env scripts/send-test-email.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
@@ -19,6 +20,7 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^9.0.5",
     "pg": "^8.13.1"
   },
   "devDependencies": {
@@ -26,6 +28,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.10",
     "esbuild": "^0.24.0",
     "serverless": "^3.39.0",

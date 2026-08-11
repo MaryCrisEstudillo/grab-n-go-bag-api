@@ -22,10 +22,11 @@ provider:
     JWT_SECRET: ${env:JWT_SECRET}
     JWT_EXPIRES_IN: ${env:JWT_EXPIRES_IN, '30d'}
     CORS_ORIGIN: ${env:CORS_ORIGIN, '*'}
-    # Absent until a sending domain exists. The digest job logs and skips
-    # rather than failing when these are unset.
-    RESEND_API_KEY: ${env:RESEND_API_KEY, ''}
-    EMAIL_FROM: ${env:EMAIL_FROM, ''}
+    # Absent until mail is set up. The digest job logs and skips rather than
+    # failing when these are unset.
+    GMAIL_USER: ${env:GMAIL_USER, ''}
+    GMAIL_APP_PASSWORD: ${env:GMAIL_APP_PASSWORD, ''}
+    EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'GrabnGo bag'}
     APP_URL: ${env:APP_URL, 'http://localhost:3000'}
   httpApi:
     cors:

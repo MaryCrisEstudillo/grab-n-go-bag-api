@@ -24,6 +24,7 @@ npm run dev                # http://localhost:3001
 | `npm run dev` | serverless-offline on :3001, with hot reload |
 | `npm run migrate` | Apply any migrations that haven't run |
 | `npm run db:check` | Confirm `DATABASE_URL` connects, and say what's there |
+| `npm run email:test -- you@gmail.com` | Send one real reminder, to check the mail setup |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | TypeScript only |
 | `npm run deploy` | `serverless deploy` — needs AWS credentials |
@@ -160,13 +161,52 @@ link sitting in an inbox for a year can never become a login. The route is a
 reminders off because their mail provider prefetched a link would be its own
 kind of bug.
 
-Sending goes through Resend. **Both `RESEND_API_KEY` and `EMAIL_FROM` are
-optional**: without them the job still runs, logs how many people it would have
-mailed, and sends nothing — so none of this blocks on a domain existing.
+#### Setting up sending
 
-To turn it on, verify a domain in Resend, add the DKIM records it gives you,
-and set the two variables. A `From` address on an unverified domain is worse
-than no email at all: Gmail treats it as forged.
+Mail goes out through Gmail's own SMTP server. That needs **no domain**: it
+leaves from a real Gmail address, so SPF and DKIM pass on their own and it
+reaches other Gmail inboxes instead of their spam folders. The cap is about 500
+messages a day, far beyond what this sends.
+
+**`GMAIL_USER` and `GMAIL_APP_PASSWORD` are optional.** Without them the job
+still runs, logs how many people it would have mailed, and sends nothing — so
+nothing here blocks on mail being set up.
+
+To turn it on:
+
+1. **Use a throwaway Gmail account**, not your main one. An app password
+   bypasses 2FA for mail, so it shouldn't sit on an account holding anything
+   that matters.
+2. Turn on **2-Step Verification** — Google Account → Security. App passwords
+   don't exist without it.
+3. Go to **[myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)**,
+   create one named anything, and copy the 16 characters.
+4. Put both in `.env`:
+
+   ```sh
+   GMAIL_USER=yourapp@gmail.com
+   GMAIL_APP_PASSWORD=abcdefghijklmnop
+   ```
+
+5. Prove it works before trusting the scheduled job:
+
+   ```sh
+   npm run email:test -- you@gmail.com
+   ```
+
+   That authenticates, sends one real reminder with made-up items, and names
+   the likely cause if it fails.
+
+Only the display name is ours to choose — Gmail sends as the account you
+authenticated with, so `EMAIL_FROM_NAME` controls what recipients see beside
+the address and nothing else.
+
+One deployment constraint this creates: **the Lambdas must stay outside a
+VPC**, or outbound SMTP has nowhere to go without a NAT gateway. They already
+are, since Neon is reached over the public internet too.
+
+Moving to a custom domain later means rewriting `send` in `src/lib/email.ts`
+and nothing else.
 
 ### Registration seeds a bag
 

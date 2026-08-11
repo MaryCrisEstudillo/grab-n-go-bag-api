@@ -1,9 +1,16 @@
 /**
- * Sending mail, via Resend's REST API.
+ * Sending mail, through Gmail's SMTP server.
  *
- * No SDK: it is one POST, and a dependency that wraps one POST is a dependency
- * that has to be kept current for no reason.
+ * Gmail rather than a sending service because it needs no domain: mail leaves
+ * from a real Gmail address, so SPF and DKIM pass on their own and it reaches
+ * other Gmail inboxes rather than their spam folders. The cap is ~500 messages
+ * a day, far beyond what this sends.
+ *
+ * Everything provider-specific is in this file. Moving to a sending service on
+ * a custom domain later means rewriting `send` and nothing else.
  */
+
+import nodemailer, { type Transporter } from 'nodemailer';
 
 export interface Email {
   to: string;
@@ -13,8 +20,7 @@ export interface Email {
   /**
    * The URL that turns these off. It becomes both a link in the body and a
    * `List-Unsubscribe` header — Gmail surfaces the header as a one-click
-   * control next to the sender, and treats its absence on bulk mail as a
-   * negative signal.
+   * control beside the sender, and counts its absence against bulk mail.
    */
   unsubscribeUrl: string;
 }
@@ -23,54 +29,81 @@ export type SendResult =
   | { sent: true; id: string }
   | { sent: false; reason: string };
 
-const RESEND_ENDPOINT = 'https://api.resend.com/emails';
+const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'GrabnGo bag';
 
 /**
  * Unconfigured is a normal state, not an error: the API runs perfectly well
- * before a sending domain exists, it just doesn't send. Saying so once per
- * attempt beats crashing a scheduled job that has other users to get through.
+ * before mail is set up, it just doesn't send. Reporting that beats crashing a
+ * scheduled job that has other users to get through.
  */
 export function isConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD);
+}
+
+/**
+ * Built once per container and reused. Handshaking TLS and authenticating on
+ * every message would dominate the cost of sending one.
+ */
+let transporter: Transporter | undefined;
+
+function getTransporter(): Transporter {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.GMAIL_USER,
+        // An app password, not the account password — see the README.
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+  }
+
+  return transporter;
+}
+
+/**
+ * Gmail only lets you send as the account you authenticated with, so the
+ * address is fixed and only the display name is ours to choose. Setting it
+ * from `GMAIL_USER` removes a way to get this wrong.
+ */
+export function fromAddress(): string {
+  return `${FROM_NAME} <${process.env.GMAIL_USER}>`;
 }
 
 export async function send(email: Email): Promise<SendResult> {
   if (!isConfigured()) {
-    return { sent: false, reason: 'email not configured (RESEND_API_KEY / EMAIL_FROM)' };
+    return {
+      sent: false,
+      reason: 'email not configured (GMAIL_USER / GMAIL_APP_PASSWORD)',
+    };
   }
 
   try {
-    const response = await fetch(RESEND_ENDPOINT, {
-      method: 'POST',
+    const info = await getTransporter().sendMail({
+      from: fromAddress(),
+      to: email.to,
+      subject: email.subject,
+      text: email.text,
+      html: email.html,
       headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
+        'List-Unsubscribe': `<${email.unsubscribeUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM,
-        to: [email.to],
-        subject: email.subject,
-        html: email.html,
-        text: email.text,
-        headers: {
-          'List-Unsubscribe': `<${email.unsubscribeUrl}>`,
-          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-        },
-      }),
     });
 
-    if (!response.ok) {
-      const body = await response.text();
-      return { sent: false, reason: `${response.status} ${body.slice(0, 200)}` };
-    }
-
-    const { id } = (await response.json()) as { id?: string };
-    return { sent: true, id: id ?? 'unknown' };
+    return { sent: true, id: info.messageId };
   } catch (error) {
-    // A provider outage must not take the whole run down.
+    // A refused recipient or a Gmail hiccup must not take the whole run down.
     return {
       sent: false,
       reason: error instanceof Error ? error.message : 'unknown error',
     };
   }
+}
+
+/** Proves the credentials work without sending anything. */
+export async function verifyConnection(): Promise<void> {
+  await getTransporter().verify();
 }
