@@ -9,6 +9,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
+import { normalizeConnectionString, sslFor } from '../src/lib/connection';
 
 /**
  * Migrations run against the direct connection when there is one. A pooler in
@@ -34,12 +35,9 @@ const DATABASE_URL = resolveDatabaseUrl();
 const MIGRATIONS_DIR = join(import.meta.dirname, '..', 'migrations');
 
 async function main() {
-  const isLocal =
-    DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1');
-
   const client = new pg.Client({
-    connectionString: DATABASE_URL,
-    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    connectionString: normalizeConnectionString(DATABASE_URL),
+    ssl: sslFor(DATABASE_URL),
   });
   await client.connect();
 

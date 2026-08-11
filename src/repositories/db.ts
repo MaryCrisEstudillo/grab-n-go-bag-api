@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { DATABASE_URL } from '../lib/env';
+import { normalizeConnectionString, sslFor } from '../lib/connection';
 
 /**
  * A `date` column is a calendar day, and node-postgres would otherwise hand it
@@ -20,14 +21,10 @@ pg.types.setTypeParser(pg.types.builtins.DATE, (value) => value);
  */
 let pool: pg.Pool | undefined;
 
-function isLocal(url: string): boolean {
-  return url.includes('localhost') || url.includes('127.0.0.1');
-}
-
 export function getPool(): pg.Pool {
   if (!pool) {
     pool = new pg.Pool({
-      connectionString: DATABASE_URL,
+      connectionString: normalizeConnectionString(DATABASE_URL),
       max: 1,
       idleTimeoutMillis: 30_000,
       /**
@@ -37,9 +34,7 @@ export function getPool(): pg.Pool {
        * normal cold start into an error.
        */
       connectionTimeoutMillis: 15_000,
-      // Managed Postgres presents a cert from a CA bundle Lambda doesn't ship.
-      // Local Postgres has no TLS at all.
-      ssl: isLocal(DATABASE_URL) ? undefined : { rejectUnauthorized: false },
+      ssl: sslFor(DATABASE_URL),
     });
 
     // A dropped backend must not take the container down with an unhandled

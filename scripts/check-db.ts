@@ -8,6 +8,7 @@
  */
 
 import pg from 'pg';
+import { isLocal, normalizeConnectionString, sslFor } from '../src/lib/connection';
 
 function resolveDatabaseUrl(): string {
   const value = process.env.DATABASE_URL;
@@ -30,20 +31,24 @@ function describe(connectionString: string): string {
   }
 }
 
-const isLocal = url.includes('localhost') || url.includes('127.0.0.1');
-
 async function main() {
   console.log(`connecting to ${describe(url)}`);
-  if (!isLocal && url.includes('-pooler')) {
-    console.log('endpoint       pooled');
-  } else if (!isLocal) {
-    console.log('endpoint       direct');
+
+  if (!isLocal(url)) {
+    console.log(`endpoint       ${url.includes('-pooler') ? 'pooled' : 'direct'}`);
+    console.log(
+      `tls            ${
+        process.env.DATABASE_SSL_NO_VERIFY === 'true'
+          ? 'encrypted, certificate NOT verified'
+          : 'encrypted, certificate verified'
+      }`,
+    );
   }
 
   const started = Date.now();
   const client = new pg.Client({
-    connectionString: url,
-    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+    connectionString: normalizeConnectionString(url),
+    ssl: sslFor(url),
     // A sleeping serverless instance takes a moment to wake.
     connectionTimeoutMillis: 20_000,
   });
