@@ -17,3 +17,5 @@ Thumbs.db
 npm-debug.log*
 *.tsbuildinfo
 coverage/
+
+dist/

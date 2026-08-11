@@ -1,0 +1,49 @@
+# Render blueprint. Point Render at this repo and it reads this file.
+#
+# The free instance sleeps after ~15 minutes idle and takes a few seconds to
+# wake on the next request. Neon's free compute does the same, so the very
+# first visit after a quiet spell is slow — everything after it is not.
+
+services:
+  - type: web
+    name: grabngo-bag-api
+    runtime: node
+    plan: free
+    region: singapore
+    # --include=dev because the build needs TypeScript and esbuild, which are
+    # dev dependencies. Render sets NODE_ENV=production, which would otherwise
+    # skip them and fail the build.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    # Answers without touching the database, so a wake-up ping is cheap.
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+
+      # Set these in the Render dashboard — never in this file, which is
+      # committed to a public repository.
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      - key: CRON_SECRET
+        sync: false
+
+      # The GitHub Pages origin. Anything else is refused by the browser, so
+      # this has to match exactly — no trailing slash.
+      - key: CORS_ORIGIN
+        sync: false
+      # Where the links inside the reminder emails point.
+      - key: APP_URL
+        sync: false
+
+      - key: EMAIL_FROM_NAME
+        value: GrabnGo bag
+      - key: JWT_EXPIRES_IN
+        value: 30d
