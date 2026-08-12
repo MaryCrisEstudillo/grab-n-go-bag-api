@@ -410,7 +410,18 @@ already:
 | --- | --- |
 | `logRetentionInDays: 14` | CloudWatch storage, which otherwise grows forever |
 | Stage throttling, 10/s | Requests, before Lambda is invoked at all |
-| `reservedConcurrency: 1` on the digest | Overlapping runs mailing people twice |
+| The account concurrency limit | How many functions can run at once, account-wide |
+
+That last one is AWS's, not ours. **A new account starts at 10 concurrent
+executions**, and Lambda refuses to reserve any of it while fewer than 10 would
+be left unreserved — so `reservedConcurrency` on any function fails the deploy
+until you request a quota increase. That is not worth working around: an
+account-wide ceiling of 10 is a firmer cap than a per-function reservation.
+
+It does mean the digest has no concurrency guard of its own. What stops a
+retried run mailing people twice is `last_digest_signature` (migration 003),
+written per user as each send succeeds — a mechanism that holds across days
+rather than only across a race.
 
 Throttling is deliberately the crude kind: it caps the rate across every route,
 not per caller. Something subtler needs usage plans and API keys, which a public

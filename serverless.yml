@@ -97,10 +97,17 @@ functions:
     handler: src/handlers/sendExpiryDigests.handler
     # Mails every user who has something expiring, one provider call each.
     timeout: 300
-    # One run at a time. A retried or overlapping invocation would mail the same
-    # people twice, which is both the worst bug this job can have and the only
-    # way it could burn through Gmail's daily quota.
-    reservedConcurrency: 1
+    # No reservedConcurrency here, deliberately. A new AWS account's total
+    # concurrency limit is 10, and Lambda refuses to reserve any of it while
+    # that would leave fewer than 10 unreserved — so reserving even 1 fails the
+    # deploy outright. That account-wide limit of 10 is a firmer cap than
+    # anything this file could set anyway.
+    #
+    # Overlapping runs would otherwise risk mailing people twice. What actually
+    # prevents that is `last_digest_signature` (migration 003): each user's
+    # fingerprint is written after their send, so a retry skips whoever already
+    # received one. That guard holds across days, not just across a race, which
+    # is why it was the better mechanism to rely on.
     events:
       # 00:00 UTC is 08:00 in Manila — a reminder about food worth checking
       # should arrive over breakfast, not overnight.
