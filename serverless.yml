@@ -16,6 +16,10 @@ provider:
   stage: ${opt:stage, 'dev'}
   memorySize: 512
   timeout: 15
+  # Lambda log groups never expire by default, so CloudWatch storage accrues
+  # forever for logs nobody will read. This is the line item that quietly bills
+  # a small project — more often than compute does.
+  logRetentionInDays: 14
   environment:
     NODE_OPTIONS: '--enable-source-maps'
     DATABASE_URL: ${env:DATABASE_URL}
@@ -93,6 +97,10 @@ functions:
     handler: src/handlers/sendExpiryDigests.handler
     # Mails every user who has something expiring, one provider call each.
     timeout: 300
+    # One run at a time. A retried or overlapping invocation would mail the same
+    # people twice, which is both the worst bug this job can have and the only
+    # way it could burn through Gmail's daily quota.
+    reservedConcurrency: 1
     events:
       # 00:00 UTC is 08:00 in Manila — a reminder about food worth checking
       # should arrive over breakfast, not overnight.
@@ -199,3 +207,24 @@ functions:
       - httpApi:
           method: DELETE
           path: /bag/items/{id}
+
+# ─── Cost guardrails ─────────────────────────────────────────────────────────
+# Throttling at the API Gateway stage, which is in front of Lambda: a request
+# refused here is never invoked, so it costs nothing at all.
+#
+# HTTP APIs have no `throttle` option in serverless.yml, so this patches the
+# stage CloudFormation generates. Rate is sustained requests per second across
+# every route; burst is how far above it a spike may briefly go.
+#
+# 10/s is roughly a thousand times what this app will see and still low enough
+# that someone hammering it can't run up a bill. Callers over the limit get 429.
+#
+# Note this caps the *rate*, not the monthly total — a sustained attack could
+# still accumulate. The budget alarm is what catches that; see the README.
+resources:
+  extensions:
+    HttpApiStage:
+      Properties:
+        DefaultRouteSettings:
+          ThrottlingRateLimit: 10
+          ThrottlingBurstLimit: 20

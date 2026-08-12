@@ -382,6 +382,54 @@ npm run deploy -- --stage prod --region ap-southeast-1
 ```
 
 Needs AWS credentials, plus `DATABASE_URL` and `JWT_SECRET` in the environment
-`serverless.yml` reads from. Before this is more than a personal project, those
-two want to come from SSM or Secrets Manager rather than a local `.env`, and
-migrations want to run from CI rather than a laptop.
+`serverless.yml` reads from. `useDotenv: true` means a deploy from a laptop
+reads `.env` and bakes those values into the function configuration — they
+travel to AWS at deploy time without ever entering Git. Deploying from CI
+instead means putting them in the CI environment.
+
+Before this is more than a personal project, those two want to come from SSM or
+Secrets Manager rather than a local `.env`, and migrations want to run from CI
+rather than a laptop.
+
+**Set `CORS_ORIGIN` and `APP_URL` to the real frontend URL before deploying.**
+Left at `localhost`, the API works perfectly in curl and is blocked by every
+browser, and the reminder emails link somewhere only you can open.
+
+### Keeping the bill at zero
+
+Free tier covers this comfortably, but the two halves expire differently:
+Lambda's 1M requests and 400,000 GB-seconds per month are perpetual, while API
+Gateway's 1M requests run out after twelve months and cost about $1 per million
+after that. Verify current pricing rather than trusting this paragraph.
+
+**AWS has no switch that stops spending.** Budgets alert; they do not halt. So
+the ceiling is built from parts, all of them free. Three are in `serverless.yml`
+already:
+
+| Guardrail | What it bounds |
+| --- | --- |
+| `logRetentionInDays: 14` | CloudWatch storage, which otherwise grows forever |
+| Stage throttling, 10/s | Requests, before Lambda is invoked at all |
+| `reservedConcurrency: 1` on the digest | Overlapping runs mailing people twice |
+
+Throttling is deliberately the crude kind: it caps the rate across every route,
+not per caller. Something subtler needs usage plans and API keys, which a public
+frontend can't hold secretly anyway.
+
+Two more are account settings rather than code:
+
+- **A zero-spend budget.** Billing → Budgets → the *Zero spend* template. It
+  emails you the moment anything exceeds free tier. Free for the first two.
+- **A kill switch, optionally.** A billing alarm publishing to SNS, triggering a
+  function that sets `reservedConcurrency: 0` on every function in the stack.
+  Zero concurrency means invocations stop dead. It is the only true hard stop
+  available, and it costs nothing.
+
+**What none of this bounds** is a sustained attack: 10 requests a second is
+still 26 million a month if someone keeps it up. The budget alert is what
+catches that, which is why it is worth setting up rather than skipping.
+
+The reassuring part is structural. Runaway AWS bills come from functions that
+trigger themselves — a write that fires a function that writes again. Nothing
+here has that shape: invocations come from an HTTP request or from the daily
+schedule, and both terminate.
