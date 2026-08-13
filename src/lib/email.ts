@@ -29,7 +29,7 @@ export type SendResult =
   | { sent: true; id: string }
   | { sent: false; reason: string };
 
-const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'GrabnGo bag';
+const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'GrabnGo App';
 
 /**
  * Unconfigured is a normal state, not an error: the API runs perfectly well

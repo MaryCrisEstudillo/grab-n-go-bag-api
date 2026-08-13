@@ -44,6 +44,6 @@ services:
         sync: false
 
       - key: EMAIL_FROM_NAME
-        value: GrabnGo bag
+        value: GrabnGo App
       - key: JWT_EXPIRES_IN
         value: 30d

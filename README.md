@@ -1,6 +1,6 @@
-# GrabnGo bag API
+# GrabnGo App API
 
-The backend for [GrabnGo bag](../grab-n-go-bag-app) — sessions, categories and
+The backend for [GrabnGo App](../grab-n-go-bag-app) — sessions, categories and
 items for the emergency-kit tracker.
 
 AWS Lambda behind API Gateway, deployed with the Serverless Framework, over
@@ -323,65 +323,9 @@ Two things worth knowing:
   parameter.** node-postgres doesn't implement channel binding; TLS is
   unaffected.
 
-## Deploying to Render
+## Deploying
 
-Render runs the API as an ordinary Node server, deploys straight from this
-repo, and needs no credit card. `render.yaml` describes the service, so Render
-reads it rather than you filling in a form.
-
-The same seventeen handlers serve both targets. `src/lib/router.ts` translates
-an incoming Node request into the event shape they already expect and their
-result back into a response, so nothing in `handlers/`, `services/` or
-`repositories/` knows or cares which it is running under. One route table in
-`src/server.ts` means an endpoint can't exist in one target and quietly not in
-the other.
-
-1. **Create the service.** At [render.com](https://render.com), sign in with
-   GitHub → New → Blueprint → pick `grab-n-go-bag-api`. It finds
-   `render.yaml` on its own.
-
-2. **Set the environment variables** it asks for — the ones marked
-   `sync: false` are deliberately not in the file, because this repo is public:
-
-   | Variable | Value |
-   | --- | --- |
-   | `DATABASE_URL` | your Neon **pooled** string |
-   | `JWT_SECRET` | the one from `.env` |
-   | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | as in `.env` |
-   | `CORS_ORIGIN` | your GitHub Pages URL, **no trailing slash**. Comma-separate to allow more than one |
-   | `APP_URL` | the same URL — it's the link inside the emails |
-   | `CRON_SECRET` | any long random string |
-
-3. **Note the service URL** Render gives you, something like
-   `https://grabngo-bag-api.onrender.com`. That's what the frontend needs.
-
-**The free instance sleeps after ~15 minutes idle** and takes a few seconds to
-wake. Neon's free compute does the same, so the first visit after a quiet spell
-is slow and everything after it is not. `/health` answers without touching the
-database, so a warm-up ping is cheap.
-
-### The daily reminder on Render
-
-Free instances get no scheduler, so the job is also an endpoint:
-`POST /internal/run-digest`, guarded by `CRON_SECRET`. Without the right secret
-it answers `404` rather than `401` — an attacker shouldn't learn it exists, and
-anyone who could call it freely could mail every user repeatedly and burn the
-daily sending quota.
-
-Point a free scheduler at it — [cron-job.org](https://cron-job.org) needs no
-card:
-
-```
-URL     https://your-api.onrender.com/internal/run-digest
-Method  POST
-Header  x-cron-secret: <your CRON_SECRET>
-When    daily, 08:00 Asia/Manila
-```
-
-On Lambda this is EventBridge instead, and `serverless.yml` already declares
-it. Both call the same code.
-
-## Deploying to AWS instead
+This runs on AWS Lambda, in `ap-southeast-1`, as the `prod` stage.
 
 ```sh
 npm run deploy
@@ -473,3 +417,23 @@ The reassuring part is structural. Runaway AWS bills come from functions that
 trigger themselves — a write that fires a function that writes again. Nothing
 here has that shape: invocations come from an HTTP request or from the daily
 schedule, and both terminate.
+
+## Render, if you ever want it
+
+Not used. AWS is what this runs on. `render.yaml` is committed and still valid,
+so pointing Render at this repo would work for a host that needs no AWS account
+and no card. Everything Render needs is in that file, including which
+environment variables it will ask you for.
+
+Two things differ on that target. The free instance sleeps after about fifteen
+minutes idle and takes a few seconds to wake, and free instances get no
+scheduler, so the daily reminder is an endpoint instead:
+`POST /internal/run-digest`, guarded by `CRON_SECRET`, pointed at by any free
+cron service. On Lambda that same job is an EventBridge schedule declared in
+`serverless.yml`.
+
+Both targets run the same code. `src/lib/router.ts` translates an incoming Node
+request into the event shape the handlers already expect and their result back
+into a response, so nothing in `handlers/`, `services/` or `repositories/`
+knows which it is running under. One route table in `src/server.ts` means an
+endpoint cannot exist in one target and quietly not in the other.

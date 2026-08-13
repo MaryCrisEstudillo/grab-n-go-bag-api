@@ -50,7 +50,7 @@ provider:
     # failing when these are unset.
     GMAIL_USER: ${env:GMAIL_USER, ''}
     GMAIL_APP_PASSWORD: ${env:GMAIL_APP_PASSWORD, ''}
-    EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'GrabnGo bag'}
+    EMAIL_FROM_NAME: ${env:EMAIL_FROM_NAME, 'GrabnGo App'}
     APP_URL: ${env:APP_URL, 'http://localhost:3000'}
   httpApi:
     cors:

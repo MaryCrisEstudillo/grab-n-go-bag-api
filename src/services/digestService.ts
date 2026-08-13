@@ -180,7 +180,7 @@ export function renderHtml(
                 </p>
 
                 <p style="margin:24px 0 0;font-size:12px;color:#6f625f;border-top:1px solid #e3dbda;padding-top:16px;">
-                  You're getting this because you have an account on GrabnGo bag.
+                  You're getting this because you have an account on GrabnGo App.
                   <a href="${unsubscribeUrl}" style="color:#6f625f;">Stop these reminders</a>.
                 </p>
               </td>
