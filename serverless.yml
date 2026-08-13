@@ -17,6 +17,10 @@ provider:
   # `render.yaml`, which all describe the same runtime from different angles.
   runtime: nodejs22.x
   region: ${opt:region, 'ap-southeast-1'}
+  # `npm run deploy` passes --stage prod explicitly. Without it this default
+  # applies, and a bare `serverless deploy` silently stands up a second, whole
+  # stack: 18 more functions, a different API URL, and a second copy of the
+  # daily digest schedule pointed at the same live database.
   stage: ${opt:stage, 'dev'}
   memorySize: 512
   timeout: 15
