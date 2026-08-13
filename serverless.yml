@@ -15,6 +15,18 @@ provider:
   # no new functions after 2027-02-01, and no updates to existing ones after
   # 2027-03-03. Bump this together with `custom.esbuild.target`, `.nvmrc` and
   # `render.yaml`, which all describe the same runtime from different angles.
+  #
+  # Every command prints "Warning: Invalid configuration encountered at
+  # 'provider.runtime'". Expected, and safe to ignore: Serverless 3.40 is the
+  # last v3, and its bundled list of runtimes was frozen before Lambda added
+  # Node 22. It is checking its own schema, not AWS, and the value reaches
+  # CloudFormation untouched — `aws lambda list-functions` shows nodejs22.x.
+  #
+  # Do not silence it with `configValidationMode`. `off` would drop validation
+  # for this entire file, so a genuine typo would deploy quietly; `error`, which
+  # the accompanying deprecation notice recommends, would turn this one false
+  # positive into a failed deploy. That last point is also why moving to v4 is
+  # not a bump: v4 makes config warnings fatal by default.
   runtime: nodejs22.x
   region: ${opt:region, 'ap-southeast-1'}
   # `npm run deploy` passes --stage prod explicitly. Without it this default
