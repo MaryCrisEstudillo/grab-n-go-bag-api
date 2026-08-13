@@ -8,26 +8,32 @@ Postgres. Sixteen endpoints, one handler each.
 
 ## Running it
 
-Requires Node 20+ (there's an `.nvmrc`) and Docker.
+Requires Node 22+ (there's an `.nvmrc`). Docker is optional, and only for
+running Postgres locally rather than against a hosted database.
 
 ```sh
 nvm use
 npm install
 cp .env.example .env       # then set JWT_SECRET to anything long
-docker compose up -d       # Postgres on :5432
+docker compose up -d       # Postgres on :5432, skip this if using Neon
 npm run migrate            # create the tables
 npm run dev                # http://localhost:3001
 ```
 
+`DATABASE_URL` decides which database you are working against, and a hosted one
+is still a real one. Point it at the production Neon string and everything you
+do locally, including registering and deleting, changes live data.
+
 | Script | Does |
 | --- | --- |
-| `npm run dev` | serverless-offline on :3001, with hot reload |
+| `npm run dev` | A plain Node server on :3001, with hot reload |
+| `npm run dev:lambda` | The same routes through serverless-offline, on :3001 |
 | `npm run migrate` | Apply any migrations that haven't run |
 | `npm run db:check` | Confirm `DATABASE_URL` connects, and say what's there |
 | `npm run email:test -- you@gmail.com` | Send one real reminder, to check the mail setup |
 | `npm test` | Unit tests (Vitest) |
 | `npm run typecheck` | TypeScript only |
-| `npm run deploy` | `serverless deploy` — needs AWS credentials |
+| `npm run deploy` | Deploy to the `prod` stage on AWS — needs AWS credentials |
 
 Point the frontend at it with both of its base URLs:
 
@@ -342,7 +348,7 @@ the other.
    | `DATABASE_URL` | your Neon **pooled** string |
    | `JWT_SECRET` | the one from `.env` |
    | `GMAIL_USER` / `GMAIL_APP_PASSWORD` | as in `.env` |
-   | `CORS_ORIGIN` | your GitHub Pages URL, **no trailing slash** |
+   | `CORS_ORIGIN` | your GitHub Pages URL, **no trailing slash**. Comma-separate to allow more than one |
    | `APP_URL` | the same URL — it's the link inside the emails |
    | `CRON_SECRET` | any long random string |
 
@@ -378,8 +384,16 @@ it. Both call the same code.
 ## Deploying to AWS instead
 
 ```sh
-npm run deploy -- --stage prod --region ap-southeast-1
+npm run deploy
 ```
+
+That is `serverless deploy --stage prod`. The stage is part of the script on
+purpose: `serverless.yml` falls back to a `dev` stage when none is given, and a
+bare `serverless deploy` therefore builds a whole second stack, with its own 18
+functions, its own API URL and its own copy of the daily digest schedule,
+against the same database. Only `grabngo-bag-api-prod` should ever exist.
+
+Deploying prints the API's URL. Runs on the Node 22 Lambda runtime.
 
 Needs AWS credentials, plus `DATABASE_URL` and `JWT_SECRET` in the environment
 `serverless.yml` reads from. `useDotenv: true` means a deploy from a laptop
@@ -394,6 +408,21 @@ rather than a laptop.
 **Set `CORS_ORIGIN` and `APP_URL` to the real frontend URL before deploying.**
 Left at `localhost`, the API works perfectly in curl and is blocked by every
 browser, and the reminder emails link somewhere only you can open.
+
+`CORS_ORIGIN` accepts a comma-separated list, so the deployed site and a local
+dev server can both be allowed at once:
+
+```sh
+CORS_ORIGIN=https://you.github.io,http://localhost:3000
+```
+
+An origin that is not on the list gets an `Access-Control-Allow-Origin` naming
+a different site, which is what the browser needs in order to refuse it.
+
+The list reaches two places. API Gateway answers preflights for the deployed
+API, and `scripts/cors.cjs` splits the variable into the sequence its config
+needs. `lib/router.ts` does the same job for the local server, and never runs
+on Lambda.
 
 ### Keeping the bill at zero
 
