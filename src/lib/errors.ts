@@ -22,12 +22,27 @@ export const badRequest = (message: string, field?: string) =>
   new AppError(400, message, field);
 
 /**
- * Deliberately vague, and used for both a missing account and a wrong
- * password: saying which is which turns the login form into a way to find out
- * whether an address has an account here.
+ * A password that doesn't match an account that does exist.
+ *
+ * This used to cover the missing-account case too, so that the login form
+ * couldn't be used to find out which addresses are registered here. That was
+ * traded away deliberately for the clearer message: someone who mistypes their
+ * address should be told to register rather than be left doubting a password
+ * they got right. See `noSuchAccount`.
  */
 export const invalidCredentials = () =>
-  new AppError(401, 'Those details don’t match an account.');
+  new AppError(401, 'That password doesn’t match this account.', 'password');
+
+/**
+ * The other half of that split. Attributed to the email field, so the form puts
+ * it where the mistake actually is.
+ */
+export const noSuchAccount = () =>
+  new AppError(
+    401,
+    'No account found for that email. Create one to get started.',
+    'email',
+  );
 
 export const unauthorized = (message = 'Sign in to continue.') =>
   new AppError(401, message);

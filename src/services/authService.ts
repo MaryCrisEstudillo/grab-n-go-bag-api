@@ -1,5 +1,10 @@
 import type { AuthSession, User } from '../types';
-import { conflict, invalidCredentials, notFound } from '../lib/errors';
+import {
+  conflict,
+  invalidCredentials,
+  noSuchAccount,
+  notFound,
+} from '../lib/errors';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { signToken } from '../lib/token';
 import { assertValid, checkEmail, checkPassword } from '../lib/validation';
@@ -19,14 +24,12 @@ export async function signIn(body: Record<string, unknown>): Promise<AuthSession
   const user = await users.findByEmail(email);
 
   /**
-   * Hash a throwaway string when there is no account, so a missing address and
-   * a wrong password take the same time to answer. Otherwise the response time
-   * alone tells you which addresses are registered.
+   * A dummy hash used to run here, so that a missing address and a wrong
+   * password took the same time to answer. It is gone because the two now
+   * return different messages anyway. Equalising the timing while the response
+   * body states which case it is would defend nothing.
    */
-  if (!user) {
-    await verifyPassword(String(body.password), '$2a$10$' + 'x'.repeat(53));
-    throw invalidCredentials();
-  }
+  if (!user) throw noSuchAccount();
 
   if (!(await verifyPassword(String(body.password), user.password_hash))) {
     throw invalidCredentials();
