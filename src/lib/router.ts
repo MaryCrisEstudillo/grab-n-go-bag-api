@@ -13,6 +13,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
   Context,
 } from 'aws-lambda';
+import { CORS_ORIGINS } from './env';
 
 export type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -84,19 +85,29 @@ async function readBody(req: IncomingMessage): Promise<string | undefined> {
   return body || undefined;
 }
 
-function corsHeaders(origin: string | undefined): Record<string, string> {
-  const allowed = process.env.CORS_ORIGIN ?? '*';
+const ALLOWS_ANY_ORIGIN = CORS_ORIGINS.includes('*');
 
-  return {
-    // Echoing the request's origin only when it's the allowed one keeps this
-    // honest: a wildcard would let any site call the API with a user's token.
-    'Access-Control-Allow-Origin':
-      allowed === '*' ? (origin ?? '*') : allowed,
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Max-Age': '86400',
-    Vary: 'Origin',
-  };
+/** Constant for the life of the process, so they are built once. */
+const STATIC_CORS_HEADERS = {
+  'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE,OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Max-Age': '86400',
+  Vary: 'Origin',
+} as const;
+
+function corsHeaders(origin: string | undefined): Record<string, string> {
+  /**
+   * Echoing the request's origin only when it's an allowed one keeps this
+   * honest: a wildcard would let any site call the API with a user's token.
+   * An origin that matches nothing still gets a header naming the first allowed
+   * one, which is what the browser needs to see in order to block the response.
+   */
+  const allowed =
+    origin && (ALLOWS_ANY_ORIGIN || CORS_ORIGINS.includes(origin))
+      ? origin
+      : CORS_ORIGINS[0];
+
+  return { 'Access-Control-Allow-Origin': allowed, ...STATIC_CORS_HEADERS };
 }
 
 export function createRequestListener(routes: Route[]) {
